@@ -106,7 +106,8 @@ void device_info_print_memory(void)
     ESP_LOGI(TAG, "=== Memory Information ===");
     ESP_LOGI(TAG, "  Free heap: %" PRIu32 " bytes", (uint32_t)esp_get_free_heap_size());
     ESP_LOGI(TAG, "  Minimum free heap: %" PRIu32 " bytes", (uint32_t)esp_get_minimum_free_heap_size());
-    ESP_LOGI(TAG, "  Internal RAM free: %zu bytes", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));    ESP_LOGI(TAG, "  External RAM free: %zu bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    ESP_LOGI(TAG, "  Internal RAM free: %zu bytes", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    ESP_LOGI(TAG, "  External RAM free: %zu bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
 
 void device_info_print_hardware_features(void)
@@ -122,12 +123,6 @@ void device_info_print_hardware_features(void)
     ESP_LOGI(TAG, "  UART Controllers: %lu", (unsigned long)SOC_UART_NUM);
     ESP_LOGI(TAG, "  Timer Groups: %lu", (unsigned long)SOC_TIMER_GROUP_TOTAL_TIMERS);
     ESP_LOGI(TAG, "  PWM Channels: %lu", (unsigned long)SOC_LEDC_CHANNEL_NUM);
-      // Touch sensor capabilities
-    #ifdef SOC_TOUCH_SENSOR_NUM
-    ESP_LOGI(TAG, "  Touch Sensors: %lu", (unsigned long)SOC_TOUCH_SENSOR_NUM);
-    #else
-    ESP_LOGI(TAG, "  Touch Sensors: Not available");
-    #endif
     
     // RTC GPIO
     #ifdef SOC_RTC_GPIO_PIN_COUNT
@@ -135,7 +130,8 @@ void device_info_print_hardware_features(void)
     #else
     ESP_LOGI(TAG, "  RTC GPIO Pins: Not available");
     #endif
-      // Crypto hardware
+    
+    // Crypto hardware
     ESP_LOGI(TAG, "  Hardware Crypto:");
     #ifdef SOC_AES_SUPPORT_AES_128
     ESP_LOGI(TAG, "    - AES-128/192/256 acceleration");
@@ -146,8 +142,7 @@ void device_info_print_hardware_features(void)
     #ifdef SOC_RSA_MAX_BIT_LEN
     ESP_LOGI(TAG, "    - RSA acceleration (up to %lu bits)", (unsigned long)SOC_RSA_MAX_BIT_LEN);
     #endif
-    
-    // Communication protocols
+      // Communication protocols
     ESP_LOGI(TAG, "  Communication Protocols:");
     #ifdef SOC_TWAI_CONTROLLER_NUM
     ESP_LOGI(TAG, "    - CAN/TWAI Controllers: %lu", (unsigned long)SOC_TWAI_CONTROLLER_NUM);
@@ -163,7 +158,8 @@ void device_info_print_hardware_features(void)
     #endif
     
     // Memory capabilities
-    ESP_LOGI(TAG, "  Memory Capabilities:");    ESP_LOGI(TAG, "    - DMA capable memory: %zu bytes", heap_caps_get_free_size(MALLOC_CAP_DMA));
+    ESP_LOGI(TAG, "  Memory Capabilities:");
+    ESP_LOGI(TAG, "    - DMA capable memory: %zu bytes", heap_caps_get_free_size(MALLOC_CAP_DMA));
     ESP_LOGI(TAG, "    - 32-bit aligned memory: %zu bytes", heap_caps_get_free_size(MALLOC_CAP_32BIT));
     ESP_LOGI(TAG, "    - Executable memory: %zu bytes", heap_caps_get_free_size(MALLOC_CAP_EXEC));
     ESP_LOGI(TAG, "    - RTC fast memory: %zu bytes", heap_caps_get_free_size(MALLOC_CAP_RTCRAM));
@@ -172,11 +168,13 @@ void device_info_print_hardware_features(void)
 void device_info_print_peripherals(void)
 {
     ESP_LOGI(TAG, "=== Peripheral Information ===");
-      // GPIO information
+    
+    // GPIO information
     ESP_LOGI(TAG, "  GPIO Configuration:");
     ESP_LOGI(TAG, "    - Total GPIO pins: %lu", (unsigned long)SOC_GPIO_PIN_COUNT);
     ESP_LOGI(TAG, "    - GPIO pins 0-%lu available for general use", (unsigned long)(SOC_GPIO_PIN_COUNT - 1));
-      // ADC information
+    
+    // ADC information
     ESP_LOGI(TAG, "  ADC Configuration:");
     #ifdef CONFIG_IDF_TARGET_ESP32
     ESP_LOGI(TAG, "    - ADC1 channels: 8 (GPIO32-39)");
@@ -186,8 +184,7 @@ void device_info_print_peripherals(void)
     ESP_LOGI(TAG, "    - ADC1 channels: 10");
     ESP_LOGI(TAG, "    - ADC2 channels: 10");
     ESP_LOGI(TAG, "    - ADC resolution: up to 13 bits");
-    #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-    ESP_LOGI(TAG, "    - ADC1 channels: 10");
+    #elif defined(CONFIG_IDF_TARGET_ESP32S3)    ESP_LOGI(TAG, "    - ADC1 channels: 10");
     ESP_LOGI(TAG, "    - ADC2 channels: 10");
     ESP_LOGI(TAG, "    - ADC resolution: up to 12 bits");
     #elif defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -197,7 +194,8 @@ void device_info_print_peripherals(void)
     #else
     ESP_LOGI(TAG, "    - ADC channels: Available");
     #endif
-      // SPI information
+    
+    // SPI information
     ESP_LOGI(TAG, "  SPI Configuration:");
     ESP_LOGI(TAG, "    - SPI controllers: %lu", (unsigned long)SOC_SPI_PERIPH_NUM);
     ESP_LOGI(TAG, "    - Max transfer size: %lu bytes", (unsigned long)SOC_SPI_MAXIMUM_BUFFER_SIZE);
