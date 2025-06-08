@@ -30,4 +30,19 @@ void device_info_print_memory(void);
  */
 void device_info_print_mac_addresses(void);
 
+/**
+ * @brief Print detailed hardware features and capabilities
+ */
+void device_info_print_hardware_features(void);
+
+/**
+ * @brief Print peripheral and GPIO information
+ */
+void device_info_print_peripherals(void);
+
+/**
+ * @brief Print clock and timing information
+ */
+void device_info_print_clocks(void);
+
 #endif // DEVICE_INFO_H
