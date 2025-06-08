@@ -8,6 +8,7 @@
 #include "wifi_manager.h"
 #include "ping_manager.h"
 #include "device_info.h"
+#include "mqtt_manager.h"
 
 static const char *TAG = "MAIN";
 
@@ -18,6 +19,29 @@ void ping_result_handler(const char* ip_address, bool success, uint32_t response
         ESP_LOGI(TAG, "✓ Ping to %s successful: %" PRIu32 " ms", ip_address, response_time);
     } else {
         ESP_LOGW(TAG, "✗ Ping to %s failed", ip_address);
+    }
+    
+    // Send ping result via MQTT if connected
+    mqtt_manager_send_ping_result(ip_address, success, response_time);
+}
+
+// MQTT message callback function
+void mqtt_message_handler(const char* topic, const char* data, int data_len)
+{
+    ESP_LOGI(TAG, "MQTT message received on topic '%s': %.*s", topic, data_len, data);
+    
+    // Handle different command topics
+    if (strstr(topic, "commands") != NULL) {
+        if (strncmp(data, "ping_google", data_len) == 0) {
+            ESP_LOGI(TAG, "Executing ping_google command");
+            ping_manager_ping_google();
+        } else if (strncmp(data, "device_info", data_len) == 0) {
+            ESP_LOGI(TAG, "Executing device_info command");
+            mqtt_manager_send_device_info();
+        } else if (strncmp(data, "hello", data_len) == 0) {
+            ESP_LOGI(TAG, "Executing hello command");
+            mqtt_manager_send_hello();
+        }
     }
 }
 
@@ -46,6 +70,38 @@ void app_main(void)
         ESP_LOGE(TAG, "Failed to initialize WiFi manager");
         ping_manager_deinit();
         return;
+    }
+    
+    // Wait a moment for WiFi to fully connect
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    
+    // Initialize MQTT manager after WiFi is connected
+    if (wifi_manager_is_connected()) {
+        ESP_LOGI(TAG, "WiFi connected, initializing MQTT...");
+        ret = mqtt_manager_init(mqtt_message_handler);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize MQTT manager");
+        } else {
+            ESP_LOGI(TAG, "MQTT manager initialized successfully");
+        }
+        
+        // Wait for MQTT to connect
+        int mqtt_wait_count = 0;
+        while (!mqtt_manager_is_connected() && mqtt_wait_count < 30) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            mqtt_wait_count++;
+            ESP_LOGI(TAG, "Waiting for MQTT connection... (%d/30)", mqtt_wait_count);
+        }
+        
+        if (mqtt_manager_is_connected()) {
+            ESP_LOGI(TAG, "MQTT connected successfully!");
+            
+            // Send initial hello message
+            mqtt_manager_send_hello();
+            
+            // Send status update
+            mqtt_manager_send_status("ESP32 device online and ready");
+        }
     }
     
     // Test one-time ping to Google first

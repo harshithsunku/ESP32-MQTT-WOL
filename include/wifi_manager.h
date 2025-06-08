@@ -4,11 +4,7 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "freertos/event_groups.h"
-
-// WiFi configuration
-#define WIFI_SSID      "HighSpeedFiberHome"
-#define WIFI_PASS      "123456789000"
-#define MAXIMUM_RETRY  5
+#include "secrets.h"  // Include secrets for WiFi configuration
 
 // Event bits
 #define WIFI_CONNECTED_BIT BIT0

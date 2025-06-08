@@ -8,10 +8,14 @@ A comprehensive, modular ESP32 IoT project featuring WiFi connectivity, advanced
 - **📡 WiFi Manager**: Robust WiFi connection management with auto-reconnection
 - **🏓 Advanced Ping Manager**: Continuous multi-target ping monitoring with thread-safe operations
 - **🔍 Device Information**: Comprehensive hardware feature detection and system diagnostics
-- **🌐 MQTT Integration**: Wake-on-LAN functionality via MQTT commands (planned)
+- **📡 MQTT Manager**: Secure MQTT connectivity with HiveMQ Cloud integration
+- **🔐 Secure Configuration**: Environment-based configuration system for credentials
 
 ### Key Capabilities
 - ✅ **Modular Architecture**: Clean separation of concerns with dedicated modules
+- ✅ **Secure MQTT Communication**: TLS-encrypted MQTT with certificate validation
+- ✅ **Hello Message Broadcasting**: Automatic device registration via MQTT
+- ✅ **Remote Command Execution**: MQTT-based remote control capabilities
 - ✅ **Multi-Target Ping Monitoring**: Monitor up to 10 different IP addresses simultaneously
 - ✅ **Real-time Callbacks**: Instant ping result notifications with customizable callbacks
 - ✅ **Thread-Safe Operations**: FreeRTOS-based synchronization with mutex and queues
@@ -19,14 +23,17 @@ A comprehensive, modular ESP32 IoT project featuring WiFi connectivity, advanced
 - ✅ **Comprehensive Diagnostics**: Detailed hardware and system information reporting
 - ✅ **Statistics Tracking**: Success/failure rates and response time monitoring
 - ✅ **Cross-Platform Support**: Works with all ESP32 family devices (ESP32, S2, S3, C3)
+- ✅ **Git-Safe Credentials**: Secure configuration system that keeps secrets out of version control
 
 ## 📋 Table of Contents
 
 - [Hardware Requirements](#hardware-requirements)
 - [Software Requirements](#software-requirements)
-- [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
+- [Secure Configuration Setup](#secure-configuration-setup)
+- [Project Structure](#project-structure)
 - [Module Documentation](#module-documentation)
+- [MQTT Integration](#mqtt-integration)
 - [Configuration](#configuration)
 - [Usage Examples](#usage-examples)
 - [API Reference](#api-reference)
@@ -99,17 +106,29 @@ git clone https://github.com/yourusername/ESP32-MQTT-WOL.git
 cd ESP32-MQTT-WOL
 ```
 
-### 2. Open in PlatformIO
+### 2. Setup Secure Configuration
+```bash
+# Copy the configuration template
+cp include/config_template.h include/secrets.h
+```
+
+Edit `include/secrets.h` with your actual credentials:
+```c
+// WiFi Configuration
+#define WIFI_SSID          "YourWiFiSSID"
+#define WIFI_PASSWORD      "YourWiFiPassword"
+
+// MQTT Configuration (HiveMQ Cloud)
+#define MQTT_BROKER_HOST   "your-cluster.s1.eu.hivemq.cloud"
+#define MQTT_USERNAME      "your_username"
+#define MQTT_PASSWORD      "your_password"
+#define MQTT_CLIENT_ID     "ESP32_Device_001"
+```
+
+### 3. Open in PlatformIO
 ```bash
 # Open in VS Code with PlatformIO
 code .
-```
-
-### 3. Configure WiFi Credentials
-Edit `src/wifi_manager.c` and update your WiFi credentials:
-```c
-#define WIFI_SSID "YourWiFiSSID"
-#define WIFI_PASSWORD "YourWiFiPassword"
 ```
 
 ### 4. Build and Flash
@@ -120,6 +139,48 @@ pio run --target upload
 # Or use VS Code PlatformIO extension
 # Press Ctrl+Shift+P -> "PlatformIO: Upload"
 ```
+
+### 5. Monitor Output
+```bash
+# Using PlatformIO CLI
+pio device monitor
+
+# Or use VS Code PlatformIO extension
+# Press Ctrl+Shift+P -> "PlatformIO: Monitor"
+```
+
+## 🔐 Secure Configuration Setup
+
+This project uses a secure configuration system that keeps your credentials safe from accidental Git commits.
+
+### Configuration Files
+
+- **`include/config_template.h`**: Template with placeholder values (safe to commit)
+- **`include/secrets.h`**: Your actual credentials (NEVER commit this file)
+
+### First-Time Setup
+
+1. **Copy the template**:
+   ```bash
+   cp include/config_template.h include/secrets.h
+   ```
+
+2. **Edit your secrets**:
+   Open `include/secrets.h` and replace all placeholder values with your actual credentials.
+
+3. **Verify Git ignore**:
+   The `.gitignore` file ensures `secrets.h` is never committed to version control.
+
+### Detailed Configuration Guide
+
+For complete configuration instructions, see [CONFIGURATION.md](./CONFIGURATION.md).
+
+### Security Benefits
+
+- ✅ **Git-safe**: Credentials are never committed to version control
+- ✅ **Template-based**: Easy setup for new developers
+- ✅ **Environment-specific**: Different configurations for different deployments
+- ✅ **Team-friendly**: Each developer can have their own local configuration
 
 ### 5. Monitor Serial Output
 ```bash
@@ -228,6 +289,107 @@ void app_main(void) {
     device_info_print_memory();
 }
 ```
+
+## 📡 MQTT Integration
+
+The ESP32 connects to HiveMQ Cloud broker using secure MQTT over TLS (MQTTS) and provides comprehensive IoT functionality.
+
+### Features
+
+- **🔐 Secure Connection**: TLS-encrypted MQTT communication with certificate validation
+- **📤 Hello Messages**: Automatic device registration and status broadcasting
+- **📊 Device Information**: Comprehensive hardware and system info sharing
+- **🏓 Ping Monitoring**: Real-time network connectivity monitoring via MQTT
+- **📱 Remote Commands**: Execute commands remotely via MQTT topics
+- **🔄 Auto-Reconnection**: Robust connection handling with automatic recovery
+
+### MQTT Topics Structure
+
+| Topic | Purpose | QoS | Payload Format |
+|-------|---------|-----|----------------|
+| `esp32/hello` | Device hello messages | 1 | JSON with device info |
+| `esp32/status` | Device status updates | 1 | JSON with status message |
+| `esp32/device_info` | Hardware information | 1 | JSON with chip details |
+| `esp32/ping` | Ping monitoring results | 0 | JSON with ping data |
+| `esp32/commands` | Remote command execution | 1 | Plain text commands |
+
+### Example Messages
+
+**Hello Message**:
+```json
+{
+  "message": "Hello from ESP32 IoT Device!",
+  "device_mac": "aa:bb:cc:dd:ee:ff",
+  "timestamp": 1234567890
+}
+```
+
+**Ping Result**:
+```json
+{
+  "target_ip": "8.8.8.8",
+  "success": true,
+  "response_time_ms": 15,
+  "timestamp": 1234567890
+}
+```
+
+**Device Information**:
+```json
+{
+  "chip": {
+    "model": "esp32",
+    "revision": 3,
+    "cores": 2,
+    "features": ["WiFi", "Bluetooth Classic", "Bluetooth LE"]
+  },
+  "memory": {
+    "free_heap": 250000,
+    "min_free_heap": 200000
+  },
+  "mac_addresses": {
+    "wifi_sta": "aa:bb:cc:dd:ee:ff"
+  },
+  "idf_version": "v5.1.0",
+  "timestamp": 1234567890
+}
+```
+
+### Remote Commands
+
+Send commands to the `esp32/commands` topic:
+
+- `ping_google` - Execute one-time ping to Google DNS
+- `device_info` - Send detailed device information
+- `hello` - Send hello message
+
+### HiveMQ Cloud Setup
+
+1. **Create Account**: Sign up at [HiveMQ Cloud](https://www.hivemq.com/cloud/)
+2. **Create Cluster**: Set up a new MQTT cluster
+3. **Get Credentials**: Note your cluster hostname and create MQTT user credentials
+4. **Configure ESP32**: Update your `secrets.h` with the cluster details
+
+Example configuration:
+```c
+#define MQTT_BROKER_HOST   "abcd1234.s1.eu.hivemq.cloud"
+#define MQTT_USERNAME      "your_username"
+#define MQTT_PASSWORD      "your_password"
+```
+
+### Testing MQTT Connection
+
+Monitor the serial output for MQTT connection status:
+
+```
+I (4430) MQTT_MANAGER: Initializing MQTT client...
+I (4430) MQTT_MANAGER: Broker: mqtts://your-cluster.s1.eu.hivemq.cloud:8883
+I (4430) MQTT_MANAGER: Username: your_username
+I (4440) MQTT_MANAGER: Client ID: ESP32_IoT_Device
+I (5650) MQTT_MANAGER: MQTT connected to broker
+```
+
+Use an MQTT client like [MQTT Explorer](http://mqtt-explorer.com/) to subscribe to topics and send commands.
 
 ## ⚙️ Configuration
 
