@@ -1,6 +1,6 @@
 # Enhanced Device Information Module
 
-The `device_info` module has been significantly enhanced to provide comprehensive hardware feature detection and display capabilities for ESP32 family devices.
+The `device_info` module provides comprehensive hardware feature detection and display capabilities for ESP32 family devices. In the ESP32 MQTT Wake-on-LAN project, this module is used for system diagnostics and publishing device capabilities via MQTT for remote monitoring and management.
 
 ## Features Overview
 

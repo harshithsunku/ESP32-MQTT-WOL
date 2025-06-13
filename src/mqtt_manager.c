@@ -1,4 +1,5 @@
 #include "mqtt_manager.h"
+#include "wol_manager.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_chip_info.h"
@@ -25,8 +26,7 @@ static char* create_ping_result_json(const char* ip_address, bool success, uint3
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     esp_mqtt_event_handle_t event = event_data;
-    
-    switch ((esp_mqtt_event_id_t)event_id) {
+      switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT connected to broker");
             mqtt_connected = true;
@@ -39,6 +39,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             
             // Subscribe to command topics
             mqtt_manager_subscribe("esp32/commands", MQTT_QOS_1);
+            
+            // Subscribe to WoL command topics
+            mqtt_subscribe_wol_commands();
             break;
             
         case MQTT_EVENT_DISCONNECTED:
@@ -59,26 +62,31 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
             
         case MQTT_EVENT_DATA:
+        {
             ESP_LOGI(TAG, "MQTT message received:");
             ESP_LOGI(TAG, "  Topic: %.*s", event->topic_len, event->topic);
             ESP_LOGI(TAG, "  Data: %.*s", event->data_len, event->data);
             
+            // Handle WoL commands
+            char topic[event->topic_len + 1];
+            char data[event->data_len + 1];
+            
+            memcpy(topic, event->topic, event->topic_len);
+            topic[event->topic_len] = '\0';
+            
+            memcpy(data, event->data, event->data_len);
+            data[event->data_len] = '\0';
+            
+            // Check if it's a WoL command
+            mqtt_handle_wol_command(topic, data, event->data_len);
+            
             // Call user callback if provided
             if (user_message_callback) {
-                // Null-terminate the strings for callback
-                char topic[event->topic_len + 1];
-                char data[event->data_len + 1];
-                
-                memcpy(topic, event->topic, event->topic_len);
-                topic[event->topic_len] = '\0';
-                
-                memcpy(data, event->data, event->data_len);
-                data[event->data_len] = '\0';
-                
                 user_message_callback(topic, data, event->data_len);
             }
             break;
-            
+        }
+        
         case MQTT_EVENT_ERROR:
             ESP_LOGE(TAG, "MQTT error occurred");
             if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
@@ -92,7 +100,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 ESP_LOGE(TAG, "Unknown error type: 0x%x", event->error_handle->error_type);
             }
             break;
-              default:
+            
+        case MQTT_EVENT_BEFORE_CONNECT:
+        case MQTT_EVENT_DELETED:
+        case MQTT_EVENT_ANY:
+        case MQTT_USER_EVENT:
+        default:
             ESP_LOGI(TAG, "MQTT event: %" PRId32, event_id);
             break;
     }
@@ -425,4 +438,164 @@ esp_err_t mqtt_manager_subscribe(const char* topic, mqtt_qos_t qos)
     
     ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", topic, msg_id);
     return ESP_OK;
+}
+
+esp_err_t mqtt_publish(const char* topic, const char* message)
+{
+    if (!mqtt_connected || !mqtt_client || !topic || !message) {
+        return ESP_FAIL;
+    }
+    
+    int msg_id = esp_mqtt_client_publish(mqtt_client, topic, message, 0, MQTT_QOS_1, 0);
+    if (msg_id < 0) {
+        ESP_LOGE(TAG, "Failed to publish to topic: %s", topic);
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGD(TAG, "Published to %s: %s", topic, message);
+    return ESP_OK;
+}
+
+esp_err_t mqtt_subscribe_wol_commands(void)
+{
+    if (!mqtt_connected || !mqtt_client) {
+        return ESP_FAIL;
+    }
+    
+    // Subscribe to WoL commands for all devices
+    esp_err_t ret = ESP_OK;
+    
+    // Subscribe to general WoL commands: esp32/wol/+/command
+    int msg_id = esp_mqtt_client_subscribe(mqtt_client, "esp32/wol/+/command", MQTT_QOS_1);
+    if (msg_id < 0) {
+        ESP_LOGE(TAG, "Failed to subscribe to WoL commands");
+        ret = ESP_FAIL;
+    }
+    
+    // Subscribe to device control commands: esp32/device/+/control
+    msg_id = esp_mqtt_client_subscribe(mqtt_client, "esp32/device/+/control", MQTT_QOS_1);
+    if (msg_id < 0) {
+        ESP_LOGE(TAG, "Failed to subscribe to device control commands");
+        ret = ESP_FAIL;
+    }
+    
+    // Subscribe to general system commands
+    msg_id = esp_mqtt_client_subscribe(mqtt_client, "esp32/system/command", MQTT_QOS_1);
+    if (msg_id < 0) {
+        ESP_LOGE(TAG, "Failed to subscribe to system commands");
+        ret = ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "Subscribed to WoL command topics");
+    return ret;
+}
+
+esp_err_t mqtt_handle_wol_command(const char* topic, const char* data, int data_len)
+{
+    if (!topic || !data) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    ESP_LOGI(TAG, "Processing WoL command - Topic: %s, Data: %s", topic, data);
+    
+    // Parse WoL commands: esp32/wol/{device_name}/command
+    if (strncmp(topic, "esp32/wol/", 10) == 0) {
+        const char* device_start = topic + 10;
+        const char* command_start = strstr(device_start, "/command");
+        
+        if (command_start) {
+            // Extract device name
+            int device_name_len = command_start - device_start;
+            if (device_name_len > 0 && device_name_len < 32) {
+                char device_name[32];
+                strncpy(device_name, device_start, device_name_len);
+                device_name[device_name_len] = '\0';
+                  ESP_LOGI(TAG, "WoL command for device: %s, command: %s", device_name, data);
+                
+                // Forward to WoL manager
+                return wol_handle_mqtt_command(device_name, data);
+            }
+        }
+    }
+    
+    // Parse device control commands: esp32/device/{device_name}/control
+    else if (strncmp(topic, "esp32/device/", 13) == 0) {
+        const char* device_start = topic + 13;
+        const char* control_start = strstr(device_start, "/control");
+        
+        if (control_start) {
+            // Extract device name
+            int device_name_len = control_start - device_start;
+            if (device_name_len > 0 && device_name_len < 32) {
+                char device_name[32];
+                strncpy(device_name, device_start, device_name_len);
+                device_name[device_name_len] = '\0';
+                  ESP_LOGI(TAG, "Device control command for: %s, command: %s", device_name, data);
+                
+                // Forward to WoL manager
+                return wol_handle_mqtt_command(device_name, data);
+            }
+        }
+    }
+    
+    // Parse system commands: esp32/system/command
+    else if (strcmp(topic, "esp32/system/command") == 0) {
+        if (strcmp(data, "list_devices") == 0) {
+            return mqtt_publish_devices_summary();
+        } else if (strcmp(data, "status") == 0) {
+            return mqtt_manager_send_status("System running");
+        }
+    }
+    
+    return ESP_OK;
+}
+
+esp_err_t mqtt_publish_device_status(const char* device_name, bool is_online, const char* ip_address)
+{
+    if (!device_name || !ip_address) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    char topic[64];
+    char message[256];
+    
+    snprintf(topic, sizeof(topic), "esp32/device/%s/status", device_name);
+    snprintf(message, sizeof(message), 
+             "{\"device\":\"%s\",\"status\":\"%s\",\"ip\":\"%s\",\"timestamp\":%lu}",
+             device_name, is_online ? "online" : "offline", ip_address,
+             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS / 1000));
+    
+    return mqtt_publish(topic, message);
+}
+
+esp_err_t mqtt_publish_devices_summary(void)
+{
+    int device_count;
+    const wol_device_t* devices = wol_get_all_devices(&device_count);
+    
+    if (!devices) {
+        return ESP_FAIL;
+    }
+    
+    // Create JSON summary
+    char message[1024];
+    int offset = snprintf(message, sizeof(message), "{\"devices\":[");
+    
+    for (int i = 0; i < device_count && offset < sizeof(message) - 100; i++) {
+        if (i > 0) {
+            offset += snprintf(message + offset, sizeof(message) - offset, ",");
+        }
+        
+        offset += snprintf(message + offset, sizeof(message) - offset,
+                          "{\"name\":\"%s\",\"ip\":\"%s\",\"status\":\"%s\",\"enabled\":%s}",
+                          devices[i].name, devices[i].ip_address,
+                          wol_get_status_string(devices[i].status),
+                          devices[i].enabled ? "true" : "false");
+    }
+    
+    snprintf(message + offset, sizeof(message) - offset, 
+             "],\"total\":%d,\"timestamp\":%lu}", 
+             device_count, (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS / 1000));
+    
+    return mqtt_publish("esp32/system/devices", message);
 }

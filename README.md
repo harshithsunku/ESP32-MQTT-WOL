@@ -1,26 +1,26 @@
-# ESP32 Modular IoT Project
+# ESP32 MQTT Wake-on-LAN Project
 
-A comprehensive, modular ESP32 IoT project featuring WiFi connectivity, advanced ping monitoring, device diagnostics, and MQTT-based Wake-on-LAN functionality. Built with ESP-IDF framework and designed for maximum flexibility and reusability.
+A simplified, modular ESP32 IoT project featuring WiFi connectivity, MQTT-based Wake-on-LAN functionality, and automatic device monitoring. Built with ESP-IDF/PlatformIO and designed for easy deployment and maintenance.
 
 ## 🚀 Features
 
 ### Core Modules
 - **📡 WiFi Manager**: Robust WiFi connection management with auto-reconnection
-- **🏓 Advanced Ping Manager**: Continuous multi-target ping monitoring with thread-safe operations
-- **🔍 Device Information**: Comprehensive hardware feature detection and system diagnostics
-- **📡 MQTT Manager**: Secure MQTT connectivity with HiveMQ Cloud integration
+- **🏓 Simplified Ping Manager**: TCP-based device connectivity monitoring library
+- **⚡ WoL Manager**: Wake-on-LAN packet transmission with MQTT control
+- **📡 MQTT Manager**: Secure MQTT connectivity with command handling
+- **🔍 Device Information**: Hardware feature detection and system diagnostics
 - **🔐 Secure Configuration**: Environment-based configuration system for credentials
 
 ### Key Capabilities
-- ✅ **Modular Architecture**: Clean separation of concerns with dedicated modules
+- ✅ **Simplified Architecture**: Ping manager as a library service for WoL monitoring
+- ✅ **Automatic Device Monitoring**: WoL devices are automatically added to ping monitoring
+- ✅ **MQTT Wake-on-LAN Control**: Remote device wake commands via MQTT
+- ✅ **TCP Connection Testing**: Reliable host availability checking using port connections
+- ✅ **Real-time Status Updates**: MQTT status reporting for device online/offline changes
+- ✅ **Thread-Safe Operations**: FreeRTOS-based synchronization with mutex protection
 - ✅ **Secure MQTT Communication**: TLS-encrypted MQTT with certificate validation
-- ✅ **Hello Message Broadcasting**: Automatic device registration via MQTT
-- ✅ **Remote Command Execution**: MQTT-based remote control capabilities
-- ✅ **Multi-Target Ping Monitoring**: Monitor up to 10 different IP addresses simultaneously
-- ✅ **Real-time Callbacks**: Instant ping result notifications with customizable callbacks
-- ✅ **Thread-Safe Operations**: FreeRTOS-based synchronization with mutex and queues
-- ✅ **Dynamic Configuration**: Add/remove/modify ping targets at runtime
-- ✅ **Comprehensive Diagnostics**: Detailed hardware and system information reporting
+- ✅ **Easy Device Management**: Simple API for adding/removing monitored devices
 - ✅ **Statistics Tracking**: Success/failure rates and response time monitoring
 - ✅ **Cross-Platform Support**: Works with all ESP32 family devices (ESP32, S2, S3, C3)
 - ✅ **Git-Safe Credentials**: Secure configuration system that keeps secrets out of version control
@@ -78,24 +78,37 @@ A comprehensive, modular ESP32 IoT project featuring WiFi connectivity, advanced
 ESP32-MQTT-WOL/
 ├── 📄 README.md                    # This comprehensive guide
 ├── 📄 LICENSE                      # Project license
+## 📁 Project Structure
+
+```
+ESP32-MQTT-WOL/
+├── 📄 README.md                    # This comprehensive guide
 ├── 📄 platformio.ini               # PlatformIO configuration
 ├── 📄 CMakeLists.txt               # CMake build configuration
 ├── 📄 sdkconfig.esp32dev           # ESP-IDF SDK configuration
 ├── 📄 MODULAR_STRUCTURE.md         # Detailed module architecture
 ├── 📄 PING_MANAGER_USAGE.md        # Ping manager documentation
 ├── 📄 DEVICE_INFO_FEATURES.md      # Device info capabilities
+├── 📄 CONFIGURATION.md             # Configuration setup guide
 ├── 📂 include/                     # Header files
 │   ├── 📄 wifi_manager.h           # WiFi management API
-│   ├── 📄 ping_manager.h           # Ping monitoring API
-│   └── 📄 device_info.h            # Device diagnostics API
+│   ├── 📄 ping_manager.h           # Simplified ping library API
+│   ├── 📄 wol_manager.h            # Wake-on-LAN management API
+│   ├── 📄 mqtt_manager.h           # MQTT client management API
+│   ├── 📄 device_info.h            # Device diagnostics API
+│   ├── 📄 secrets.h                # Your local configuration (git-ignored)
+│   └── 📄 secrets.template.h       # Configuration template
 ├── 📂 src/                         # Source files
 │   ├── 📄 main.c                   # Main application entry point
 │   ├── 📄 wifi_manager.c           # WiFi management implementation
-│   ├── 📄 ping_manager.c           # Advanced ping monitoring
+│   ├── 📄 ping_manager.c           # TCP-based connectivity checking
+│   ├── 📄 wol_manager.c            # Wake-on-LAN device management
+│   ├── 📄 mqtt_manager.c           # MQTT client implementation
 │   ├── 📄 device_info.c            # Hardware diagnostics
 │   └── 📄 CMakeLists.txt           # Source build configuration
 ├── 📂 lib/                         # External libraries (if any)
 └── 📂 test/                        # Unit tests (expandable)
+```
 ```
 
 ## 🚀 Quick Start
@@ -223,19 +236,98 @@ void app_main(void) {
 }
 ```
 
-### 🏓 Advanced Ping Manager (`ping_manager.h/.c`)
-Sophisticated ping monitoring system with multi-target support and real-time callbacks.
+### 🏓 Simplified Ping Manager (`ping_manager.h/.c`)
+Simple connectivity monitoring library using TCP connections to check host availability.
 
 **Key Features:**
-- Monitor up to 10 IP addresses simultaneously
-- Individual intervals and timeouts per target
+- TCP connection-based host checking (ports 80 and 22)
+- Automatic integration with WoL manager
 - Real-time callback notifications
 - Thread-safe operations
-- Statistics tracking
-- Dynamic target management
+- Statistics tracking per device
+- Configurable intervals and timeouts
 
 **Basic Usage:**
 ```c
+#include "ping_manager.h"
+
+// Callback function for ping results
+void ping_result_handler(const char* name, const char* ip_address, bool success, uint32_t response_time, void* user_data) {
+    if (success) {
+        ESP_LOGI("APP", "Device %s (%s) is online: %d ms", name, ip_address, response_time);
+    } else {
+        ESP_LOGW("APP", "Device %s (%s) is offline", name, ip_address);
+    }
+}
+
+void app_main(void) {
+    // Initialize ping manager with callback
+    ping_manager_init(ping_result_handler, NULL);
+    
+    // Add devices for monitoring (typically done by WoL manager)
+    ping_manager_add_device("server1", "192.168.0.111");
+    ping_manager_add_device("desktop1", "192.168.0.112");
+    
+    // Get device status
+    const ping_target_t* device = ping_manager_get_device("server1");
+    if (device) {
+        ESP_LOGI("APP", "Device %s is %s", device->name, device->is_online ? "online" : "offline");
+    }
+}
+```
+
+### ⚡ Wake-on-LAN Manager (`wol_manager.h/.c`)
+Manages WoL devices and automatically integrates with ping monitoring for device status tracking.
+
+**Key Features:**
+- Automatic device monitoring integration
+- MQTT command handling for remote wake
+- Device status tracking and reporting
+- Magic packet transmission
+- Enable/disable device management
+
+**Basic Usage:**
+```c
+#include "wol_manager.h"
+
+void app_main(void) {
+    // Initialize WoL manager
+    wol_manager_init();
+    
+    // Add devices (automatically added to ping monitoring)
+    uint8_t mac[] = {0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E};
+    wol_add_device("server1", "192.168.0.111", mac, "Main Server");
+    
+    // Wake a device
+    wol_wake_device("server1");
+    
+    // Handle MQTT commands
+    wol_handle_mqtt_command("server1", "wake");
+}
+```
+
+### 📡 MQTT Manager (`mqtt_manager.h/.c`)
+Secure MQTT client with TLS encryption and command handling integration.
+
+**Key Features:**
+- TLS-encrypted connections
+- Automatic reconnection
+- Command routing to appropriate managers
+- Status publishing
+- Certificate validation
+
+**Basic Usage:**
+```c
+#include "mqtt_manager.h"
+
+void app_main(void) {
+    // Initialize MQTT (requires WiFi to be connected)
+    mqtt_manager_init();
+    
+    // Publish a message
+    mqtt_publish("esp32/status", "online");
+}
+```
 #include "ping_manager.h"
 
 // Callback function for ping results
@@ -292,65 +384,82 @@ void app_main(void) {
 
 ## 📡 MQTT Integration
 
-The ESP32 connects to HiveMQ Cloud broker using secure MQTT over TLS (MQTTS) and provides comprehensive IoT functionality.
+The ESP32 connects to HiveMQ Cloud broker using secure MQTT over TLS (MQTTS) and provides comprehensive Wake-on-LAN functionality.
 
 ### Features
 
 - **🔐 Secure Connection**: TLS-encrypted MQTT communication with certificate validation
 - **📤 Hello Messages**: Automatic device registration and status broadcasting
-- **📊 Device Information**: Comprehensive hardware and system info sharing
-- **🏓 Ping Monitoring**: Real-time network connectivity monitoring via MQTT
-- **📱 Remote Commands**: Execute commands remotely via MQTT topics
+- **⚡ Wake-on-LAN Control**: Remote device wake commands via MQTT
+- **📊 Device Status**: Real-time online/offline status reporting for monitored devices
+- **🏓 Connectivity Monitoring**: TCP-based host availability checking
+- **📱 Remote Commands**: Wake devices remotely via MQTT topics
 - **🔄 Auto-Reconnection**: Robust connection handling with automatic recovery
 
 ### MQTT Topics Structure
 
 | Topic | Purpose | QoS | Payload Format |
 |-------|---------|-----|----------------|
-| `esp32/hello` | Device hello messages | 1 | JSON with device info |
-| `esp32/status` | Device status updates | 1 | JSON with status message |
-| `esp32/device_info` | Hardware information | 1 | JSON with chip details |
-| `esp32/ping` | Ping monitoring results | 0 | JSON with ping data |
-| `esp32/commands` | Remote command execution | 1 | Plain text commands |
-
+| `esp32/hello` | Device registration | 1 | JSON: Device info and capabilities |
+| `esp32/device/{name}/status` | Device status updates | 1 | JSON: Online/offline status |
+| `esp32/wol/{name}/command` | Wake-on-LAN commands | 1 | String: "wake", "status", "enable", "disable" |
+| `esp32/wol/{name}/status` | Wake command results | 1 | JSON: Action confirmation |
+| `esp32/ping/stats` | Monitoring statistics | 0 | JSON: Success rates and response times |
 ### Example Messages
 
 **Hello Message**:
 ```json
 {
-  "message": "Hello from ESP32 IoT Device!",
+  "message": "ESP32 WoL Controller Online",
   "device_mac": "aa:bb:cc:dd:ee:ff",
+  "device_name": "ESP32_WoL_001",
+  "capabilities": ["wake-on-lan", "device-monitoring", "mqtt-control"],
+  "managed_devices": 3,
   "timestamp": 1234567890
 }
 ```
 
-**Ping Result**:
+**Device Status Update**:
 ```json
 {
-  "target_ip": "8.8.8.8",
-  "success": true,
-  "response_time_ms": 15,
+  "device": "server1",
+  "status": "online",
+  "ip": "192.168.0.111",
   "timestamp": 1234567890
 }
 ```
 
-**Device Information**:
+**Wake-on-LAN Command**:
 ```json
 {
-  "chip": {
-    "model": "esp32",
-    "revision": 3,
-    "cores": 2,
-    "features": ["WiFi", "Bluetooth Classic", "Bluetooth LE"]
-  },
-  "memory": {
-    "free_heap": 250000,
-    "min_free_heap": 200000
-  },
-  "mac_addresses": {
-    "wifi_sta": "aa:bb:cc:dd:ee:ff"
-  },
-  "idf_version": "v5.1.0",
+  "device": "server1",
+  "action": "wake_sent",
+  "timestamp": 1234567890
+}
+```
+
+**Ping Statistics**:
+```json
+{
+  "total_devices": 3,
+  "online_devices": 2,
+  "devices": [
+    {
+      "name": "server1",
+      "ip": "192.168.0.111",
+      "status": "online",
+      "success_rate": 98.5,
+      "avg_response_time": 12
+    },
+    {
+      "name": "desktop1", 
+      "ip": "192.168.0.112",
+      "status": "offline",
+      "success_rate": 0.0,
+      "last_seen": 1234567800
+    }
+  ]
+}
   "timestamp": 1234567890
 }
 ```

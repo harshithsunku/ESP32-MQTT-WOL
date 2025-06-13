@@ -1,6 +1,14 @@
-# Ping Manager Usage Examples
+# Simplified Ping Manager Usage
 
-This document demonstrates how to use the advanced ping manager with continuous ping capabilities.
+This document demonstrates how to use the simplified ping manager library for device connectivity monitoring in the ESP32 MQTT Wake-on-LAN project.
+
+## Overview
+
+The ping manager has been redesigned as a simple library service that:
+- Uses TCP connection attempts instead of ICMP pings for better reliability
+- Automatically integrates with the WoL manager
+- Provides device connectivity status via callbacks
+- Uses thread-safe operations with FreeRTOS
 
 ## Basic Usage
 
@@ -10,12 +18,12 @@ This document demonstrates how to use the advanced ping manager with continuous 
 #include "ping_manager.h"
 
 // Define a callback function to receive ping results
-void ping_result_handler(const char* ip_address, bool success, uint32_t response_time, void* user_data)
+void ping_result_handler(const char* name, const char* ip_address, bool success, uint32_t response_time, void* user_data)
 {
     if (success) {
-        ESP_LOGI("APP", "✓ Ping to %s successful: %d ms", ip_address, response_time);
+        ESP_LOGI("APP", "✓ Device %s (%s) is online: %d ms", name, ip_address, response_time);
     } else {
-        ESP_LOGW("APP", "✗ Ping to %s failed", ip_address);
+        ESP_LOGW("APP", "✗ Device %s (%s) is offline", name, ip_address);
     }
 }
 
@@ -26,79 +34,148 @@ if (ret != ESP_OK) {
 }
 ```
 
-### 2. Add Continuous Ping Targets
+### 2. Add Devices for Monitoring
 
 ```c
-// Add Google DNS with 10 second interval
-int google_idx = ping_manager_add_target("8.8.8.8", 10000, 3000, 1);
+// Add devices with descriptive names
+int server_idx = ping_manager_add_device("server1", "192.168.0.111");
+int desktop_idx = ping_manager_add_device("desktop1", "192.168.0.112");
+int nas_idx = ping_manager_add_device("nas1", "192.168.0.113");
 
-// Add Cloudflare DNS with 15 second interval  
-int cloudflare_idx = ping_manager_add_target("1.1.1.1", 15000, 3000, 1);
-
-// Add local gateway with 5 second interval
-int gateway_idx = ping_manager_add_target("192.168.0.1", 5000, 2000, 1);
-
-// Add custom server with 30 second interval
-int server_idx = ping_manager_add_target("192.168.1.100", 30000, 5000, 2);
+if (server_idx >= 0) {
+    ESP_LOGI("APP", "Added server1 for monitoring");
+}
 ```
 
-### 3. Manage Targets Dynamically
+### 3. Manage Device Monitoring
 
 ```c
-// Temporarily disable a target
-ping_manager_set_target_enabled(gateway_idx, false);
+// Temporarily disable monitoring for a device
+ping_manager_set_device_enabled("server1", false);
 
-// Re-enable the target
-ping_manager_set_target_enabled(gateway_idx, true);
+// Re-enable monitoring
+ping_manager_set_device_enabled("server1", true);
 
-// Update target configuration
-ping_manager_update_target(google_idx, 20000, 4000, 2); // New interval, timeout, count
-
-// Remove a target
-ping_manager_remove_target(server_idx);
+// Remove a device from monitoring
+ping_manager_remove_device("desktop1");
 ```
 
-### 4. Get Statistics
+### 4. Get Device Status and Statistics
 
 ```c
-// Get statistics for a specific target
-ping_target_t target_stats;
-if (ping_manager_get_target_stats(google_idx, &target_stats) == ESP_OK) {
-    ESP_LOGI("APP", "Target %s: Success=%d, Fail=%d", 
-             target_stats.ip_address,
-             target_stats.success_count, 
-             target_stats.fail_count);
+// Get status for a specific device
+const ping_target_t* device = ping_manager_get_device("server1");
+if (device) {
+    ESP_LOGI("APP", "Device %s: %s (Success: %d, Fail: %d)", 
+             device->name,
+             device->is_online ? "ONLINE" : "OFFLINE",
+             device->success_count,
+             device->fail_count);
 }
 
-// Get all targets
-ping_target_t all_targets[PING_MAX_TARGETS];
-int count;
-if (ping_manager_get_all_targets(all_targets, &count) == ESP_OK) {
-    for (int i = 0; i < count; i++) {
-        float success_rate = 0.0;
-        int total = all_targets[i].success_count + all_targets[i].fail_count;
-        if (total > 0) {
-            success_rate = (100.0 * all_targets[i].success_count) / total;
-        }
-        ESP_LOGI("APP", "%s: %.1f%% success rate", 
-                 all_targets[i].ip_address, success_rate);
+// Check how many devices are being monitored
+int total_devices = ping_manager_get_target_count();
+ESP_LOGI("APP", "Monitoring %d devices", total_devices);
+```
+
+## Integration with WoL Manager
+
+The ping manager is automatically used by the WoL manager. When you add devices to the WoL manager, they are automatically added to ping monitoring:
+
+```c
+#include "wol_manager.h"
+
+// Initialize WoL manager (automatically initializes ping manager)
+wol_manager_init();
+
+// Add a device to WoL (automatically adds to ping monitoring)
+uint8_t mac[] = {0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E};
+wol_add_device("server1", "192.168.0.111", mac, "Main Server");
+
+// The device is now being monitored for connectivity
+// Status changes will be reported via MQTT automatically
+```
+
+## TCP Connection Testing
+
+The ping manager uses TCP connection attempts to check host availability:
+
+1. **Primary Check**: Attempts to connect to port 80 (HTTP)
+2. **Fallback Check**: If port 80 fails, tries port 22 (SSH)
+3. **Timeout Handling**: Configurable timeout (default 3 seconds)
+4. **Non-blocking**: Uses non-blocking sockets with select()
+
+This approach is more reliable than ICMP pings on many networks where ICMP may be blocked.
+
+## Configuration Parameters
+
+```c
+// Constants defined in ping_manager.h
+#define PING_MAX_TARGETS        20      // Maximum devices to monitor
+#define PING_DEFAULT_INTERVAL   10000   // 10 seconds between checks
+#define PING_DEFAULT_TIMEOUT    3000    // 3 second timeout
+#define PING_DEFAULT_COUNT      1       // 1 ping per cycle
+```
+
+## Thread Safety
+
+The ping manager is fully thread-safe:
+- Uses FreeRTOS mutex for data protection
+- Safe to call from multiple tasks
+- Callback function is called from ping task context
+
+## Memory Usage
+
+- **Static Memory**: ~2KB for device storage (20 devices × ~100 bytes each)
+- **Task Stack**: 4KB for ping monitoring task
+- **Dynamic Memory**: Minimal (mutex and temporary socket buffers)
+
+## Best Practices
+
+1. **Initialize Early**: Initialize ping manager before adding devices
+2. **Handle Callbacks**: Always implement the callback function for status updates
+3. **Error Checking**: Check return values for all API calls
+4. **Resource Cleanup**: Call `ping_manager_deinit()` when shutting down
+5. **Network Ready**: Ensure WiFi is connected before initializing
+
+## Example: Complete Integration
+
+```c
+#include "wifi_manager.h"
+#include "ping_manager.h"
+#include "wol_manager.h"
+#include "mqtt_manager.h"
+
+void ping_status_callback(const char* name, const char* ip_address, bool success, uint32_t response_time, void* user_data) {
+    // Update WoL manager with device status
+    wol_update_device_status(name, success);
+    
+    // Log status changes
+    ESP_LOGI("PING", "Device %s (%s): %s", name, ip_address, success ? "ONLINE" : "OFFLINE");
+}
+
+void app_main(void) {
+    // Initialize NVS
+    nvs_flash_init();
+    
+    // Connect to WiFi
+    wifi_manager_init();
+    
+    // Initialize managers in order
+    ping_manager_init(ping_status_callback, NULL);
+    wol_manager_init();  // This will add devices to ping monitoring
+    mqtt_manager_init();
+    
+    // Main loop - device monitoring is automatic
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(60000)); // Check every minute
+        
+        // Optional: Log statistics
+        int device_count = ping_manager_get_target_count();
+        ESP_LOGI("APP", "Monitoring %d devices", device_count);
     }
 }
 ```
-
-### 5. One-time Pings
-
-```c
-// One-time ping (doesn't affect continuous ping targets)
-ping_manager_ping_once("192.168.1.1", 3, 2000);
-
-// Quick ping to Google
-ping_manager_ping_google();
-```
-
-## Advanced Configuration
-
-### Target Configuration Parameters
 
 - **interval_ms**: Time between ping cycles (minimum recommended: 1000ms)
 - **timeout_ms**: Maximum time to wait for ping response

@@ -83,6 +83,44 @@ esp_err_t mqtt_manager_publish(const char* topic, const char* data, mqtt_qos_t q
  */
 esp_err_t mqtt_manager_subscribe(const char* topic, mqtt_qos_t qos);
 
+/**
+ * @brief Publish MQTT message to a topic
+ * @param topic MQTT topic
+ * @param message Message to publish
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t mqtt_publish(const char* topic, const char* message);
+
+/**
+ * @brief Subscribe to WoL command topics
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t mqtt_subscribe_wol_commands(void);
+
+/**
+ * @brief Handle WoL MQTT commands
+ * @param topic MQTT topic
+ * @param data Message data
+ * @param data_len Length of message data
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t mqtt_handle_wol_command(const char* topic, const char* data, int data_len);
+
+/**
+ * @brief Publish device status to MQTT
+ * @param device_name Device name
+ * @param is_online Online status
+ * @param ip_address Device IP address
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t mqtt_publish_device_status(const char* device_name, bool is_online, const char* ip_address);
+
+/**
+ * @brief Publish all devices status summary
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t mqtt_publish_devices_summary(void);
+
 #ifdef __cplusplus
 }
 #endif
